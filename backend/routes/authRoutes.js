@@ -1,7 +1,8 @@
-const express = require("express");
-const { body, validationResult } = require("express-validator");
-const User = require("../models/User");
-const { generateToken } = require("../utils/auth");
+import express from 'express';
+import { body, validationResult } from 'express-validator';
+import User from '../models/User.js';
+import { generateToken } from '../utils/auth.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -16,6 +17,20 @@ const validateLogin = [
     body("email").isEmail().withMessage("Please enter a valid email"),
     body("password").notEmpty().withMessage("Password is required")
 ];
+
+// Get user profile
+router.get("/profile", authenticateToken, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select("-password");
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        res.json(user);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Server error" });
+    }
+});
 
 // Register user
 router.post("/register", validateRegistration, async (req, res) => {
@@ -38,7 +53,8 @@ router.post("/register", validateRegistration, async (req, res) => {
         user = new User({
             username,
             email,
-            password
+            password,
+            role: 'farmer' // Default role
         });
 
         await user.save();
@@ -99,7 +115,8 @@ router.post("/login", validateLogin, async (req, res) => {
                 id: user._id,
                 username: user.username,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                walletAddress: user.walletAddress
             }
         });
     } catch (error) {
@@ -108,4 +125,4 @@ router.post("/login", validateLogin, async (req, res) => {
     }
 });
 
-module.exports = router; 
+export default router; 

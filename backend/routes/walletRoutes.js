@@ -1,43 +1,82 @@
-const express = require("express");
-const { connection, keypair, mintPublicKey } = require("../utils/solana");
-const { getOrCreateAssociatedTokenAccount, createTransferInstruction, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
-const { PublicKey, Transaction, sendAndConfirmTransaction } = require("@solana/web3.js");
+import express from 'express';
+import { connection, keypair, mintPublicKey } from '../utils/solana.js';
+import { getOrCreateAssociatedTokenAccount, createTransferInstruction, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { PublicKey, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
 
 const router = express.Router();
 
 /**
  * Transfer tokens to another wallet
  */
-router.post("/transfer", async (req, res) => {
+router.post('/transfer', async (req, res) => {
     try {
-        const { recipient, amount } = req.body;
-
-        if (!recipient || !amount) {
-            return res.status(400).json({ error: "Recipient and amount are required" });
+        const { toAddress, amount } = req.body;
+        
+        if (!toAddress || !amount) {
+            return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        const recipientPublicKey = new PublicKey(recipient);
-        const senderTokenAccount = await getOrCreateAssociatedTokenAccount(
-            connection, keypair, mintPublicKey, keypair.publicKey
+        const toPublicKey = new PublicKey(toAddress);
+        
+        // Get or create token accounts
+        const fromTokenAccount = await getOrCreateAssociatedTokenAccount(
+            connection,
+            keypair,
+            mintPublicKey,
+            keypair.publicKey
         );
 
-        const recipientTokenAccount = await getOrCreateAssociatedTokenAccount(
-            connection, keypair, mintPublicKey, recipientPublicKey
+        const toTokenAccount = await getOrCreateAssociatedTokenAccount(
+            connection,
+            keypair,
+            mintPublicKey,
+            toPublicKey
         );
 
-        const transaction = new Transaction().add(
-            createTransferInstruction(
-                senderTokenAccount.address, recipientTokenAccount.address, keypair.publicKey, amount * 1e9, [], TOKEN_PROGRAM_ID
-            )
+        // Create transfer instruction
+        const transferInstruction = createTransferInstruction(
+            fromTokenAccount.address,
+            toTokenAccount.address,
+            keypair.publicKey,
+            amount
         );
 
-        const signature = await sendAndConfirmTransaction(connection, transaction, [keypair]);
+        // Create and send transaction
+        const transaction = new Transaction().add(transferInstruction);
+        const signature = await sendAndConfirmTransaction(
+            connection,
+            transaction,
+            [keypair]
+        );
 
-        res.json({ message: "Transfer successful", signature });
+        res.json({ success: true, signature });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: error.message });
+        console.error('Transfer error:', error);
+        res.status(500).json({ error: 'Failed to transfer tokens' });
     }
 });
 
-module.exports = router;
+/**
+ * Get token balance for a wallet
+ */
+router.get('/balance/:address', async (req, res) => {
+    try {
+        const { address } = req.params;
+        const publicKey = new PublicKey(address);
+
+        const tokenAccount = await getOrCreateAssociatedTokenAccount(
+            connection,
+            keypair,
+            mintPublicKey,
+            publicKey
+        );
+
+        const balance = await connection.getTokenAccountBalance(tokenAccount.address);
+        res.json({ balance: balance.value.uiAmount });
+    } catch (error) {
+        console.error('Balance check error:', error);
+        res.status(500).json({ error: 'Failed to get token balance' });
+    }
+});
+
+export default router;

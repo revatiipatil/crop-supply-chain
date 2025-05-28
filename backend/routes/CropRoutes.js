@@ -1,9 +1,10 @@
-const express = require("express");
-const { body, validationResult } = require("express-validator");
-const CropData = require("../models/CropData");
-const RegisteredCrop = require("../models/RegisteredCrop");
-const { protect, authorize } = require("../utils/auth");
-const User = require("../models/User");
+import express from 'express';
+import { body, validationResult } from 'express-validator';
+import CropData from '../models/CropData.js';
+import RegisteredCrop from '../models/RegisteredCrop.js';
+import { protect, authorize } from '../utils/auth.js';
+import User from '../models/User.js';
+import { mintTokens } from '../utils/solana.js';
 
 const router = express.Router();
 
@@ -109,63 +110,79 @@ router.get("/latest", protect, async (req, res) => {
 });
 
 // Register a new crop
-router.post("/register", protect, validateCropRegistration, async (req, res) => {
+router.post("/register", protect, authorize("farmer"), validateCropRegistration, async (req, res) => {
     try {
-        // Check for validation errors
+        // Validate request
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            console.log('Validation errors:', errors.array());
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const { name, weight, location, walletAddress } = req.body;
+        const farmer = req.user;
+
+        // Check if farmer has a valid wallet address
+        if (!walletAddress) {
             return res.status(400).json({
                 success: false,
-                error: errors.array()[0].msg
+                error: "Wallet address is required. Please connect your wallet first."
             });
         }
 
-        const { name, weight, location } = req.body;
-        console.log('Registering crop:', { name, weight, location, farmer: req.user.id });
-
-        // Find user first to ensure they exist
-        const user = await User.findById(req.user.id);
-        if (!user) {
-            console.error('User not found:', req.user.id);
-            return res.status(404).json({
-                success: false,
-                error: "User not found"
-            });
+        // Update farmer's wallet address if it has changed
+        if (farmer.walletAddress !== walletAddress) {
+            farmer.walletAddress = walletAddress;
+            await farmer.save();
         }
 
-        const newCrop = new RegisteredCrop({
+        // Create new registered crop
+        const registeredCrop = new RegisteredCrop({
             name,
             weight: parseFloat(weight),
             location,
-            farmer: req.user.id
+            farmer: farmer._id
         });
 
-        console.log('Saving new crop:', newCrop);
-        await newCrop.save();
+        // Save the crop
+        await registeredCrop.save();
 
-        // Update user's token balance
-        const tokensToAdd = Math.floor(parseFloat(weight));
-        user.tokenBalance += tokensToAdd;
-        await user.save();
+        // Calculate tokens (1 token per 10kg)
+        const tokensToMint = Math.floor(parseFloat(weight) / 10);
 
-        console.log('Crop registered successfully:', {
-            crop: newCrop,
-            newBalance: user.tokenBalance
-        });
+        let tokenMintingSuccess = false;
+        let tokenMintingError = null;
 
+        if (tokensToMint > 0) {
+            try {
+                // Mint tokens to farmer's wallet
+                await mintTokens(walletAddress, tokensToMint);
+                tokenMintingSuccess = true;
+                
+                // Update user's token balance
+                farmer.tokenBalance = (farmer.tokenBalance || 0) + tokensToMint;
+                await farmer.save();
+            } catch (mintError) {
+                console.error('Token minting error:', mintError);
+                tokenMintingError = mintError.message;
+            }
+        }
+
+        // Return success response
         res.status(201).json({
             success: true,
-            crop: newCrop,
-            newBalance: user.tokenBalance
+            data: {
+                crop: registeredCrop,
+                tokensMinted: tokenMintingSuccess ? tokensToMint : 0,
+                newBalance: farmer.tokenBalance,
+                warning: tokenMintingError ? `Crop registered but token minting failed: ${tokenMintingError}` : undefined
+            }
         });
     } catch (error) {
-        console.error('Error registering crop:', error);
-        // Send more detailed error information
-        res.status(500).json({
+        console.error('Crop registration error:', error);
+        res.status(500).json({ 
             success: false,
-            error: error.message || "Failed to register crop",
-            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            error: "Failed to register crop",
+            details: process.env.NODE_ENV === "development" ? error.message : undefined
         });
     }
 });
@@ -198,4 +215,4 @@ router.get("/my-crops", protect, async (req, res) => {
 
 console.log('Crop routes setup complete');
 
-module.exports = router;
+export default router;

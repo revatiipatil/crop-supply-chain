@@ -1,58 +1,74 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { authService } from '../services/api';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { login as apiLogin, register as apiRegister, logout as apiLogout, getProfile } from '../services/api';
 
 const AuthContext = createContext(null);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    console.log('AuthProvider: Checking for current user...');
-    const currentUser = authService.getCurrentUser();
-    console.log('AuthProvider: Current user from storage:', currentUser);
-    if (currentUser) {
-      setUser(currentUser);
-    }
-    setLoading(false);
+    const checkAuth = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const userData = await getProfile();
+          setUser(userData);
+        }
+      } catch (err) {
+        console.error('Auth check failed:', err);
+        localStorage.removeItem('token');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
   }, []);
 
   const login = async (email, password) => {
     try {
-      console.log('AuthProvider: Attempting login...');
-      const response = await authService.login(email, password);
-      console.log('AuthProvider: Login successful:', response);
+      setError(null);
+      const response = await apiLogin({ email, password });
       setUser(response.user);
       return response;
-    } catch (error) {
-      console.error('AuthProvider: Login failed:', error);
-      throw error;
+    } catch (err) {
+      setError(err.message || 'Login failed');
+      throw err;
     }
   };
 
   const register = async (username, email, password) => {
     try {
-      console.log('AuthProvider: Attempting registration...');
-      const response = await authService.register(username, email, password);
-      console.log('AuthProvider: Registration successful:', response);
+      setError(null);
+      const response = await apiRegister({ username, email, password });
       setUser(response.user);
       return response;
-    } catch (error) {
-      console.error('AuthProvider: Registration failed:', error);
-      throw error;
+    } catch (err) {
+      setError(err.message || 'Registration failed');
+      throw err;
     }
   };
 
   const logout = () => {
-    console.log('AuthProvider: Logging out...');
-    authService.logout();
+    apiLogout();
     setUser(null);
-    console.log('AuthProvider: User state cleared');
+    setError(null);
   };
 
   const value = {
     user,
     loading,
+    error,
     login,
     register,
     logout,
@@ -65,10 +81,4 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}; 
+export default AuthContext; 

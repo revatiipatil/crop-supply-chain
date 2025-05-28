@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+// Create axios instance with default config
 const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -9,7 +10,7 @@ const api = axios.create({
   },
 });
 
-// Add token to requests if it exists
+// Add token to requests if available
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -18,59 +19,75 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auth services
-export const authService = {
-  login: async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-    }
-    return response.data;
-  },
+// Handle response errors
+api.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    console.error('API Error:', error.response?.data || error.message);
+    throw error.response?.data || error;
+  }
+);
 
-  register: async (username, email, password) => {
-    const response = await api.post('/auth/register', { username, email, password });
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-    }
-    return response.data;
-  },
-
-  logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-  },
-
-  getCurrentUser: () => {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
-  },
+// Crop related API calls
+export const getAllData = async () => {
+  try {
+    return await api.get('/crop/all');
+  } catch (error) {
+    throw error;
+  }
 };
 
-// Crop data services
-export const cropService = {
-  getAllData: async (page = 1, limit = 10) => {
-    const params = new URLSearchParams({ page, limit });
-    const response = await api.get(`/crop/all?${params}`);
-    return response.data;
-  },
+export const getMyCrops = async () => {
+  try {
+    return await api.get('/crop/my-crops');
+  } catch (error) {
+    throw error;
+  }
+};
 
-  getLatestData: async () => {
-    const response = await api.get('/crop/latest');
-    return response.data;
-  },
+export const addData = async (data) => {
+  try {
+    return await api.post('/crop/register', data);
+  } catch (error) {
+    throw error;
+  }
+};
 
-  addData: async (cropData) => {
-    const response = await api.post('/crop/register', cropData);
-    return response.data;
-  },
+// Auth related API calls
+export const login = async (credentials) => {
+  try {
+    const response = await api.post('/auth/login', credentials);
+    if (response.token) {
+      localStorage.setItem('token', response.token);
+    }
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
 
-  getMyCrops: async () => {
-    const response = await api.get('/crop/my-crops');
-    return response.data;
-  },
+export const register = async (userData) => {
+  try {
+    const response = await api.post('/auth/register', userData);
+    if (response.token) {
+      localStorage.setItem('token', response.token);
+    }
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const logout = () => {
+  localStorage.removeItem('token');
+};
+
+export const getProfile = async () => {
+  try {
+    return await api.get('/auth/profile');
+  } catch (error) {
+    throw error;
+  }
 };
 
 // Wallet services

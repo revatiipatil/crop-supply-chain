@@ -1,5 +1,5 @@
-const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const UserSchema = new mongoose.Schema({
     username: {
@@ -27,6 +27,19 @@ const UserSchema = new mongoose.Schema({
         type: String,
         enum: ["farmer", "admin"],
         default: "farmer"
+    },
+    walletAddress: {
+        type: String,
+        required: false,
+        validate: {
+            validator: function(v) {
+                // Only validate if a wallet address is provided
+                if (!v) return true;
+                // Add any additional wallet address validation here
+                return true;
+            },
+            message: "Invalid wallet address format"
+        }
     },
     wallet: {
         publicKey: {
@@ -74,4 +87,6 @@ UserSchema.methods.comparePassword = async function(candidatePassword) {
     }
 };
 
-module.exports = mongoose.model("User", UserSchema); 
+const User = mongoose.model("User", UserSchema);
+
+export default User; 

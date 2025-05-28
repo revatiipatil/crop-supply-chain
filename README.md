@@ -1,37 +1,30 @@
-# Crop Supply Chain
+# Crop Supply Chain Management System
 
-A blockchain-based supply chain management system for agricultural products, built with React, Node.js, and Solana.
+A modern web application for managing agricultural supply chains, built with Node.js and Express.js.
 
 ## Features
 
-- Farmer registration and profile management
-- Crop registration and tracking
-- Wallet integration with Phantom
-- Real-time SOL balance tracking
-- User-friendly dashboard interface
+- Supply chain management
+- Inventory tracking
+- Order management
+- User authentication
+- Real-time updates
 
 ## Tech Stack
 
-### Frontend
-- React.js
-- Material-UI
-- Solana Web3.js
-- Vite
+- Backend: Node.js, Express.js
+- Database: MongoDB
+- Authentication: JWT
 
-### Backend
-- Node.js
-- Express.js
-- MongoDB
-- JWT Authentication
+## Getting Started
 
-## Prerequisites
+### Prerequisites
 
 - Node.js (v14 or higher)
 - MongoDB
-- Phantom Wallet browser extension
-- Solana CLI (optional)
+- npm or yarn
 
-## Installation
+### Installation
 
 1. Clone the repository:
 ```bash
@@ -41,65 +34,25 @@ cd crop-supply-chain
 
 2. Install dependencies:
 ```bash
-# Install backend dependencies
-cd backend
-npm install
-
-# Install frontend dependencies
-cd ../frontend
 npm install
 ```
 
-3. Set up environment variables:
-Create `.env` files in both backend and frontend directories:
-
-Backend `.env`:
+3. Create a `.env` file in the root directory and add your environment variables:
 ```
-PORT=5000
-MONGO_URI=your_mongodb_uri
+PORT=3000
+MONGODB_URI=your_mongodb_uri
 JWT_SECRET=your_jwt_secret
 ```
 
-Frontend `.env`:
-```
-VITE_API_URL=http://localhost:5000/api
-VITE_SOLANA_RPC_URL=https://api.devnet.solana.com
-```
-
-4. Start the development servers:
-
+4. Start the development server:
 ```bash
-# Start backend server
-cd backend
-npm run dev
-
-# Start frontend server
-cd frontend
 npm run dev
 ```
-
-## Usage
-
-1. Open your browser and navigate to `http://localhost:5173`
-2. Install Phantom Wallet browser extension if you haven't already
-3. Connect your Phantom wallet to the Solana devnet
-4. Register as a farmer and start managing your crops
 
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Solana Blockchain
-- Material-UI
-- React.js
-- MongoDB 
+This project is licensed under the MIT License - see the LICENSE file for details. 

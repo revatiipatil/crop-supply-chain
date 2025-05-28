@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from 'mongoose';
 
 const CropDataSchema = new mongoose.Schema({
     temperature: {
@@ -25,7 +25,7 @@ const CropDataSchema = new mongoose.Schema({
     },
     addedBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: 'User',
         required: true
     }
 });
@@ -34,4 +34,6 @@ const CropDataSchema = new mongoose.Schema({
 CropDataSchema.index({ timestamp: -1 });
 CropDataSchema.index({ addedBy: 1 });
 
-module.exports = mongoose.model("CropData", CropDataSchema);
+const CropData = mongoose.model('CropData', CropDataSchema);
+
+export default CropData;

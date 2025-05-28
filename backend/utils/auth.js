@@ -1,15 +1,15 @@
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
 // Generate JWT Token
-const generateToken = (userId) => {
+export const generateToken = (userId) => {
     return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
         expiresIn: process.env.JWT_EXPIRES_IN
     });
 };
 
 // Protect routes - Authentication middleware
-const protect = async (req, res, next) => {
+export const protect = async (req, res, next) => {
     try {
         let token;
 
@@ -27,35 +27,25 @@ const protect = async (req, res, next) => {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
             // Get user from token
-            const user = await User.findById(decoded.id).select("-password");
-            if (!user) {
-                return res.status(401).json({ error: "User not found" });
-            }
-
-            req.user = user;
+            req.user = await User.findById(decoded.id).select('-password');
             next();
         } catch (error) {
             return res.status(401).json({ error: "Not authorized to access this route" });
         }
     } catch (error) {
-        next(error);
+        console.error('Auth middleware error:', error);
+        res.status(500).json({ error: "Server error" });
     }
 };
 
 // Grant access to specific roles
-const authorize = (...roles) => {
+export const authorize = (...roles) => {
     return (req, res, next) => {
         if (!roles.includes(req.user.role)) {
-            return res.status(403).json({
+            return res.status(403).json({ 
                 error: `User role ${req.user.role} is not authorized to access this route`
             });
         }
         next();
     };
-};
-
-module.exports = {
-    generateToken,
-    protect,
-    authorize
 }; 

@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from 'mongoose';
 
 const RegisteredCropSchema = new mongoose.Schema({
     name: {
@@ -18,7 +18,7 @@ const RegisteredCropSchema = new mongoose.Schema({
     },
     farmer: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: 'User',
         required: true
     },
     registeredAt: {
@@ -31,15 +31,16 @@ const RegisteredCropSchema = new mongoose.Schema({
     }
 });
 
-// Index for faster queries
-RegisteredCropSchema.index({ farmer: 1 });
-RegisteredCropSchema.index({ registeredAt: -1 });
-
-// Pre-save middleware to calculate token balance
+// Calculate token balance based on weight (1 token per 10kg)
 RegisteredCropSchema.pre('save', function(next) {
-    // Calculate tokens (1 token per kg)
-    this.tokenBalance = Math.floor(this.weight);
+    this.tokenBalance = Math.floor(this.weight / 10); // 1 token per 10kg
     next();
 });
 
-module.exports = mongoose.model("RegisteredCrop", RegisteredCropSchema); 
+// Create indexes for faster queries
+RegisteredCropSchema.index({ farmer: 1 });
+RegisteredCropSchema.index({ registeredAt: -1 });
+
+const RegisteredCrop = mongoose.model('RegisteredCrop', RegisteredCropSchema);
+
+export default RegisteredCrop; 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -6,148 +6,266 @@ import {
   DialogActions,
   TextField,
   Button,
-  Box,
   Alert,
-  InputAdornment,
+  Typography,
+  Box,
+  IconButton,
+  useTheme,
+  InputAdornment
 } from '@mui/material';
-import { cropService } from '../../services/api';
+import {
+  Close as CloseIcon,
+  Agriculture as AgricultureIcon,
+  AccountBalanceWallet as WalletIcon,
+  Scale as ScaleIcon,
+  LocationOn as LocationIcon
+} from '@mui/icons-material';
 
-const RegisterCropDialog = ({ open, onClose, onSuccess }) => {
+const RegisterCropDialog = ({ open, onClose, onSubmit, walletAddress }) => {
+  const theme = useTheme();
   const [formData, setFormData] = useState({
     name: '',
     weight: '',
-    location: '',
+    location: ''
   });
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  // Add debug logging for wallet address
+  useEffect(() => {
+    console.log('RegisterCropDialog: Received wallet address:', walletAddress);
+  }, [walletAddress]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    // For weight, only allow numbers and decimal point
-    if (name === 'weight' && value !== '' && !/^\d*\.?\d*$/.test(value)) {
-      return;
-    }
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    if (error) setError('');
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
-    // Validation
-    if (!formData.name.trim()) {
-      setError('Crop name is required');
-      setLoading(false);
+    console.log('RegisterCropDialog: Submitting form with wallet address:', walletAddress);
+
+    // Validate wallet connection
+    if (!walletAddress) {
+      console.log('RegisterCropDialog: No wallet address provided');
+      setError('Please connect your wallet first');
       return;
     }
 
-    if (!formData.weight || parseFloat(formData.weight) <= 0) {
-      setError('Please enter a valid weight');
-      setLoading(false);
+    // Validate form data
+    if (!formData.name || !formData.weight || !formData.location) {
+      setError('All fields are required');
       return;
     }
 
-    if (!formData.location.trim()) {
-      setError('Location is required');
-      setLoading(false);
+    if (parseFloat(formData.weight) <= 0) {
+      setError('Weight must be greater than 0');
       return;
     }
 
     try {
-      console.log('Submitting crop data:', formData);
-      const response = await cropService.addData({
-        name: formData.name.trim(),
+      console.log('RegisterCropDialog: Submitting crop data:', {
+        ...formData,
         weight: parseFloat(formData.weight),
-        location: formData.location.trim()
+        walletAddress
       });
       
-      if (response.success) {
-        onSuccess(response);
-        handleClose();
-      } else {
-        setError(response.error || 'Failed to register crop. Please try again.');
-      }
+      await onSubmit({
+        ...formData,
+        weight: parseFloat(formData.weight),
+        walletAddress
+      });
+      
+      // Reset form
+      setFormData({
+        name: '',
+        weight: '',
+        location: ''
+      });
+      onClose();
     } catch (err) {
-      console.error('Crop registration error:', err);
-      const errorMessage = err.response?.data?.error || 
-                          err.response?.data?.details || 
-                          err.message || 
-                          'Failed to register crop. Please try again.';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+      console.error('RegisterCropDialog: Error submitting form:', err);
+      setError(err.message || 'Failed to register crop');
     }
   };
 
-  const handleClose = () => {
-    setFormData({ name: '', weight: '', location: '' });
-    setError('');
-    onClose();
-  };
-
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Register New Crop</DialogTitle>
-      <form onSubmit={handleSubmit}>
-        <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              label="Crop Name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              disabled={loading}
-              placeholder="e.g., Wheat, Rice, Corn"
-            />
-            <TextField
-              label="Weight"
-              name="weight"
-              value={formData.weight}
-              onChange={handleChange}
-              required
-              disabled={loading}
-              type="text"
-              placeholder="0.00"
-              InputProps={{
-                endAdornment: <InputAdornment position="end">kg</InputAdornment>,
-              }}
-            />
-            <TextField
-              label="Location"
-              name="location"
-              value={formData.location}
-              onChange={handleChange}
-              required
-              disabled={loading}
-              placeholder="e.g., Farm A, Field 1"
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            color="primary"
-            disabled={loading}
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 2,
+          bgcolor: 'background.paper',
+          boxShadow: theme.shadows[5]
+        }
+      }}
+    >
+      <DialogTitle
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          pb: 2
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <AgricultureIcon sx={{ mr: 1, color: 'primary.main' }} />
+          <Typography variant="h6">Register New Crop</Typography>
+        </Box>
+        <IconButton
+          edge="end"
+          color="inherit"
+          onClick={onClose}
+          aria-label="close"
+          size="small"
+        >
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+
+      <DialogContent dividers>
+        {error && (
+          <Alert
+            severity="error"
+            sx={{
+              mb: 2,
+              borderRadius: 1
+            }}
           >
-            Register Crop
-          </Button>
-        </DialogActions>
-      </form>
+            {error}
+          </Alert>
+        )}
+        
+        {!walletAddress && (
+          <Alert
+            severity="warning"
+            sx={{
+              mb: 2,
+              borderRadius: 1
+            }}
+            icon={<WalletIcon />}
+          >
+            Please connect your wallet before registering a crop
+          </Alert>
+        )}
+
+        <Box sx={{ mb: 3, mt: 1 }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              display: 'flex',
+              alignItems: 'center'
+            }}
+          >
+            <ScaleIcon sx={{ mr: 1, fontSize: 16 }} />
+            You will receive 1 CROP token for every 10kg of crop registered
+          </Typography>
+        </Box>
+
+        <TextField
+          autoFocus
+          margin="dense"
+          name="name"
+          label="Crop Name"
+          type="text"
+          fullWidth
+          value={formData.name}
+          onChange={handleChange}
+          sx={{
+            mb: 2,
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 1
+            }
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <AgricultureIcon color="action" />
+              </InputAdornment>
+            )
+          }}
+        />
+        
+        <TextField
+          margin="dense"
+          name="weight"
+          label="Weight"
+          type="number"
+          fullWidth
+          value={formData.weight}
+          onChange={handleChange}
+          sx={{
+            mb: 2,
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 1
+            }
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <ScaleIcon color="action" />
+              </InputAdornment>
+            ),
+            endAdornment: (
+              <InputAdornment position="end">kg</InputAdornment>
+            )
+          }}
+        />
+        
+        <TextField
+          margin="dense"
+          name="location"
+          label="Location"
+          type="text"
+          fullWidth
+          value={formData.location}
+          onChange={handleChange}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 1
+            }
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <LocationIcon color="action" />
+              </InputAdornment>
+            )
+          }}
+        />
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button
+          onClick={onClose}
+          color="inherit"
+          sx={{
+            borderRadius: 1,
+            textTransform: 'none'
+          }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
+          disabled={!walletAddress}
+          sx={{
+            borderRadius: 1,
+            textTransform: 'none',
+            px: 3
+          }}
+        >
+          Register Crop
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 };

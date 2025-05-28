@@ -5,13 +5,10 @@ const connection = new Connection(process.env.REACT_APP_SOLANA_RPC_URL || 'https
 
 // Get Phantom wallet provider
 const getProvider = () => {
-  if ('phantom' in window) {
-    const provider = window.phantom?.solana;
-    if (provider?.isPhantom) {
-      return provider;
-    }
+  if (!window.solana) {
+    throw new Error('Please install Phantom wallet');
   }
-  throw new Error('Please install Phantom wallet');
+  return window.solana;
 };
 
 // Connect wallet

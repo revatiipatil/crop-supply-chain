@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Container,
@@ -18,7 +18,9 @@ import {
   IconButton,
   Tooltip,
   Chip,
-  Alert
+  Alert,
+  CircularProgress,
+  useTheme
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -27,54 +29,87 @@ import {
   Token as TokenIcon,
   ContentCopy as ContentCopyIcon,
   Refresh as RefreshIcon,
-  CheckCircle as CheckCircleIcon
+  CheckCircle as CheckCircleIcon,
+  DarkMode as DarkModeIcon
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import RegisterCropDialog from './RegisterCropDialog';
-import { cropService } from '../../services/api';
+import { getAllData, addData, getMyCrops, getProfile } from '../../services/api';
 import { format, isToday, isYesterday } from 'date-fns';
 import WalletConnect from '../wallet/WalletConnect';
 import { connectWallet, disconnectWallet, getWalletBalance } from '../../utils/wallet';
+import CropList from './CropList';
+import WalletInfo from './WalletInfo';
 
 const FarmerDashboard = () => {
+  const theme = useTheme();
+  console.log('FarmerDashboard: Component rendering');
+  
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
   const [crops, setCrops] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [openRegisterDialog, setOpenRegisterDialog] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [openDialog, setOpenDialog] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [walletConnected, setWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
   const [solBalance, setSolBalance] = useState(0);
+  const [tokenBalance, setTokenBalance] = useState(0);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
 
-  const fetchCrops = async () => {
+  const fetchCrops = useCallback(async () => {
+    console.log('FarmerDashboard: Fetching crops');
     try {
-      setLoading(true);
-      setError('');
-      const response = await cropService.getMyCrops();
-      if (response.success) {
-        setCrops(response.crops);
-      } else {
-        setError(response.error);
-      }
+      const data = await getMyCrops();
+      console.log('FarmerDashboard: Crops data received:', data);
+      setCrops(data.crops || []);
+      setTokenBalance(data.totalTokens || 0);
+      setError(null);
     } catch (err) {
-      setError('Failed to fetch crops');
-      console.error(err);
-    } finally {
-      setLoading(false);
+      console.error('FarmerDashboard: Error fetching crops:', err);
+      setError(err.message || 'Failed to fetch crops');
     }
-  };
+  }, []);
+
+  const fetchProfile = useCallback(async () => {
+    console.log('FarmerDashboard: Fetching profile');
+    try {
+      const data = await getProfile();
+      console.log('FarmerDashboard: Profile data received:', data);
+      setProfile(data);
+      setError(null);
+    } catch (err) {
+      console.error('FarmerDashboard: Error fetching profile:', err);
+      setError(err.message || 'Failed to fetch profile');
+    }
+  }, []);
 
   useEffect(() => {
-    fetchCrops();
-  }, []);
+    console.log('FarmerDashboard: useEffect triggered');
+    const loadData = async () => {
+      try {
+        console.log('FarmerDashboard: Starting data load');
+        setLoading(true);
+        await Promise.all([fetchCrops(), fetchProfile()]);
+        console.log('FarmerDashboard: Data load completed');
+      } catch (err) {
+        console.error('FarmerDashboard: Error in loadData:', err);
+        setError('Failed to load dashboard data');
+      } finally {
+        console.log('FarmerDashboard: Setting loading to false');
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [fetchCrops, fetchProfile]);
 
   const handleCopyAddress = async () => {
     try {
@@ -92,6 +127,9 @@ const FarmerDashboard = () => {
     if (balance >= 100) return { name: 'Bronze', progress: 50, color: 'error' };
     return { name: 'Basic', progress: 25, color: 'default' };
   };
+
+  // Calculate current tier based on token balance
+  const currentTier = calculateTier(tokenBalance);
 
   const formatDate = (dateString) => {
     try {
@@ -112,9 +150,8 @@ const FarmerDashboard = () => {
     }
   };
 
-  const tier = calculateTier(user.tokenBalance);
-
   const handleWalletConnect = async (publicKey) => {
+    console.log('FarmerDashboard: Wallet connected with address:', publicKey);
     setWalletConnected(true);
     setWalletAddress(publicKey);
     try {
@@ -127,261 +164,313 @@ const FarmerDashboard = () => {
   };
 
   const handleWalletDisconnect = () => {
+    console.log('FarmerDashboard: Wallet disconnected');
     setWalletConnected(false);
     setWalletAddress('');
     setSolBalance(0);
   };
 
+  // Add debug logging for wallet state
+  useEffect(() => {
+    console.log('FarmerDashboard: Current wallet state:', {
+      connected: walletConnected,
+      address: walletAddress
+    });
+  }, [walletConnected, walletAddress]);
+
+  const handleRegisterCrop = async (cropData) => {
+    try {
+      console.log('FarmerDashboard: Registering crop with data:', cropData);
+      const response = await addData(cropData);
+      if (response.success) {
+        console.log('FarmerDashboard: Crop registered successfully:', response.data);
+        
+        // Calculate new token balance (1 token per 10kg)
+        const newTokens = Math.floor(cropData.weight / 10);
+        const newTokenBalance = tokenBalance + newTokens;
+        
+        console.log('FarmerDashboard: Token calculation:', {
+          cropWeight: cropData.weight,
+          newTokens,
+          previousBalance: tokenBalance,
+          newBalance: newTokenBalance
+        });
+        
+        // Update crops list and token balance
+        setCrops(prevCrops => [response.data.crop, ...prevCrops]);
+        setTokenBalance(newTokenBalance);
+        
+        // Update profile with new token balance
+        setProfile(prevProfile => ({
+          ...prevProfile,
+          tokenBalance: newTokenBalance
+        }));
+        
+        setOpenDialog(false);
+        // Refresh the crops list to get updated data
+        await fetchCrops();
+      }
+    } catch (err) {
+      console.error('FarmerDashboard: Error registering crop:', err);
+      setError('Failed to register crop');
+    }
+  };
+
+  const handleConnectWallet = async () => {
+    try {
+      const address = await connectWallet();
+      setWalletAddress(address);
+      setWalletConnected(true);
+      
+      // Get token balance
+      const balance = await getWalletBalance(address);
+      setTokenBalance(balance);
+    } catch (err) {
+      console.error('Error connecting wallet:', err);
+      setError('Failed to connect wallet');
+    }
+  };
+
+  const handleDisconnectWallet = async () => {
+    try {
+      await disconnectWallet();
+      setWalletAddress('');
+      setWalletConnected(false);
+      setTokenBalance(0);
+    } catch (err) {
+      console.error('Error disconnecting wallet:', err);
+      setError('Failed to disconnect wallet');
+    }
+  };
+
+  const handleDialogClose = (success) => {
+    console.log('FarmerDashboard: Dialog closing, success:', success);
+    setOpenDialog(false);
+    if (success) {
+      fetchCrops();
+    }
+  };
+
+  console.log('FarmerDashboard: Current state:', { loading, error, cropsCount: crops.length, hasProfile: !!profile });
+
+  if (loading) {
+    console.log('FarmerDashboard: Rendering loading state');
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    console.log('FarmerDashboard: Rendering error state');
+    return (
+      <Container>
+        <Typography color="error" variant="h6" align="center">
+          {error}
+        </Typography>
+      </Container>
+    );
+  }
+
+  console.log('FarmerDashboard: Rendering main content');
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      {copySuccess && (
-        <Alert 
-          severity="success" 
-          sx={{ mb: 2 }}
-          icon={<CheckCircleIcon />}
-          onClose={() => setCopySuccess(false)}
-        >
-          Wallet address copied to clipboard!
-        </Alert>
-      )}
-
-      <Grid container spacing={3}>
-        {/* Farmer Profile Card */}
-        <Grid item xs={12} md={4}>
-          <Paper
-            sx={{
-              p: 3,
-              display: 'flex',
-              flexDirection: 'column',
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
-              <PersonIcon fontSize="large" color="primary" />
-            </Box>
-            <Typography variant="h6" gutterBottom>
-              Farmer Profile
-            </Typography>
-            <Typography color="text.secondary" gutterBottom>
-              {user?.email}
-            </Typography>
-            {user?.phone && (
-              <Typography color="text.secondary" gutterBottom>
-                Phone: {user.phone}
-              </Typography>
-            )}
-            {user?.address && (
-              <Typography color="text.secondary">
-                Address: {user.address}
-              </Typography>
-            )}
-            <Box mt={2}>
-              <Typography variant="subtitle2" gutterBottom>
-                Wallet Address:
-              </Typography>
-              <Box display="flex" alignItems="center">
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontFamily: 'monospace',
-                    bgcolor: 'background.paper',
-                    p: 1,
-                    borderRadius: 1,
-                    flex: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}
-                >
-                  {user.walletAddress}
-                </Typography>
-                <Tooltip title="Copy Address">
-                  <IconButton size="small" onClick={handleCopyAddress}>
-                    <ContentCopyIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            </Box>
-          </Paper>
-        </Grid>
-
-        {/* Registered Crops Card */}
-        <Grid item xs={12} md={4}>
-          <Paper
-            sx={{
-              p: 3,
-              display: 'flex',
-              flexDirection: 'column',
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
-              <AgricultureIcon fontSize="large" color="primary" />
-            </Box>
-            <Typography variant="h6" gutterBottom>
-              Registered Crops
-            </Typography>
-            <Typography variant="h4" gutterBottom>
-              {crops.length}
-            </Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => setOpenRegisterDialog(true)}
-              fullWidth
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: 'background.default',
+        color: 'text.primary',
+        pt: 3,
+        pb: 6,
+      }}
+    >
+      <Container maxWidth="xl">
+        <Grid container spacing={3}>
+          {/* Farmer Profile Card */}
+          <Grid item xs={12} md={4}>
+            <Paper
+              sx={{
+                p: 3,
+                borderRadius: 2,
+                bgcolor: 'background.paper',
+                boxShadow: theme.shadows[3],
+              }}
             >
-              Register New Crop
-            </Button>
-          </Paper>
-        </Grid>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <PersonIcon sx={{ mr: 1 }} />
+                <Typography variant="h6">Farmer Profile</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                {profile?.email || 'Email not provided'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Phone: {profile?.phone || 'Not provided'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Address: {profile?.address || 'Not provided'}
+              </Typography>
+            </Paper>
+          </Grid>
 
-        {/* Wallet Balance Card */}
-        <Grid item xs={12} md={4}>
-          <Paper
-            sx={{
-              p: 3,
-              display: 'flex',
-              flexDirection: 'column',
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
-              <TokenIcon fontSize="large" color="primary" />
-            </Box>
-            <Typography variant="h6" gutterBottom>
-              Wallet Balance
-            </Typography>
-            {walletConnected ? (
-              <>
-                <Typography variant="h4" gutterBottom>
-                  {solBalance.toFixed(4)} SOL
-                </Typography>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Wallet: {walletAddress.slice(0, 4)}...{walletAddress.slice(-4)}
-                </Typography>
-              </>
-            ) : (
-              <Box mt={2}>
-                <WalletConnect
-                  onConnect={handleWalletConnect}
-                  onDisconnect={handleWalletDisconnect}
-                />
+          {/* Registered Crops Card */}
+          <Grid item xs={12} md={4}>
+            <Paper
+              sx={{
+                p: 3,
+                borderRadius: 2,
+                bgcolor: 'background.paper',
+                boxShadow: theme.shadows[3],
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <AgricultureIcon sx={{ mr: 1 }} />
+                <Typography variant="h6">Registered Crops</Typography>
               </Box>
-            )}
-            <Box mt={2}>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                <Typography variant="body2">Tier: {tier.name}</Typography>
-                <Chip
-                  label={tier.name}
-                  color={tier.color}
-                  size="small"
-                />
+              <Typography variant="h3" gutterBottom>
+                {crops.length}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Total crop varieties registered
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setOpenDialog(true)}
+                fullWidth
+                sx={{
+                  mt: 2,
+                  bgcolor: 'primary.main',
+                  '&:hover': {
+                    bgcolor: 'primary.dark',
+                  },
+                }}
+              >
+                Register New Crop
+              </Button>
+            </Paper>
+          </Grid>
+
+          {/* Token Balance Card */}
+          <Grid item xs={12} md={4}>
+            <Paper
+              sx={{
+                p: 3,
+                borderRadius: 2,
+                bgcolor: 'background.paper',
+                boxShadow: theme.shadows[3],
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <TokenIcon sx={{ mr: 1 }} />
+                <Typography variant="h6">Token Balance</Typography>
               </Box>
+              <Typography variant="h3" gutterBottom>
+                {tokenBalance} CROP
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                1 CROP token per 10kg of registered crops
+              </Typography>
               <LinearProgress
                 variant="determinate"
-                value={tier.progress}
-                sx={{ height: 8, borderRadius: 4 }}
+                value={Math.min((tokenBalance / 500) * 100, 100)}
+                sx={{
+                  mt: 2,
+                  mb: 1,
+                  height: 8,
+                  borderRadius: 4,
+                  bgcolor: 'background.default',
+                  '& .MuiLinearProgress-bar': {
+                    borderRadius: 4,
+                    bgcolor: theme.palette[currentTier.color]?.main || theme.palette.primary.main,
+                  },
+                }}
               />
+              <Typography variant="caption" color="text.secondary">
+                {tokenBalance === 0 ? (
+                  'Basic Tier • Register crops to earn tokens'
+                ) : (
+                  `${currentTier.name} Tier • ${500 - (tokenBalance % 500)} more tokens until next tier`
+                )}
+              </Typography>
+            </Paper>
+          </Grid>
+
+          {/* Tabs and Content */}
+          <Grid item xs={12}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+              <Tabs
+                value={activeTab}
+                onChange={(e, newValue) => setActiveTab(newValue)}
+                sx={{
+                  '& .MuiTab-root': {
+                    color: 'text.secondary',
+                    '&.Mui-selected': {
+                      color: 'primary.main',
+                    },
+                  },
+                }}
+              >
+                <Tab label="My Crops" />
+                <Tab label="Token Transactions" />
+              </Tabs>
             </Box>
-          </Paper>
-        </Grid>
 
-        {/* Tabs Section */}
-        <Grid item xs={12}>
-          <Paper sx={{ width: '100%' }}>
-            <Tabs value={activeTab} onChange={handleTabChange} centered>
-              <Tab label="My Crops" />
-              <Tab label="Token Transactions" />
-            </Tabs>
-
-            {/* My Crops Tab */}
             {activeTab === 0 && (
-              <Box p={3}>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6">Registered Crops</Typography>
-                  <Tooltip title="Refresh">
-                    <IconButton onClick={fetchCrops}>
-                      <RefreshIcon />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-                {loading ? (
-                  <LinearProgress />
-                ) : error ? (
-                  <Alert severity="error">{error}</Alert>
-                ) : crops.length === 0 ? (
-                  <Box textAlign="center" py={4}>
-                    <AgricultureIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                    <Typography variant="h6" color="text.secondary" gutterBottom>
+              <Box>
+                {crops.length > 0 ? (
+                  <CropList crops={crops} />
+                ) : (
+                  <Box
+                    sx={{
+                      textAlign: 'center',
+                      py: 8,
+                      color: 'text.secondary',
+                    }}
+                  >
+                    <AgricultureIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
+                    <Typography variant="h6" gutterBottom>
                       No crops registered yet
                     </Typography>
-                    <Typography color="text.secondary">
+                    <Typography variant="body2">
                       Register your first crop to receive CROP tokens
                     </Typography>
                   </Box>
-                ) : (
-                  <TableContainer>
-                    <Table>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Crop Name</TableCell>
-                          <TableCell align="right">Weight (kg)</TableCell>
-                          <TableCell align="right">Tokens Earned</TableCell>
-                          <TableCell>Location</TableCell>
-                          <TableCell>Registration Date</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {crops.map((crop) => (
-                          <TableRow key={crop._id}>
-                            <TableCell>{crop.name}</TableCell>
-                            <TableCell align="right">{crop.weight}</TableCell>
-                            <TableCell align="right">{Math.floor(crop.weight)}</TableCell>
-                            <TableCell>{crop.location}</TableCell>
-                            <TableCell>
-                              {formatDate(crop.registeredAt || crop.createdAt)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
                 )}
               </Box>
             )}
 
-            {/* Token Transactions Tab */}
             {activeTab === 1 && (
-              <Box p={3}>
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  py: 8,
+                  color: 'text.secondary',
+                }}
+              >
+                <TokenIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
                 <Typography variant="h6" gutterBottom>
-                  Token Transactions
+                  Token transaction history coming soon
                 </Typography>
-                <Box textAlign="center" py={4}>
-                  <TokenIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary" gutterBottom>
-                    Transaction History Coming Soon
-                  </Typography>
-                  <Typography color="text.secondary">
-                    Track your token transactions and rewards here
-                  </Typography>
-                </Box>
               </Box>
             )}
-          </Paper>
+          </Grid>
         </Grid>
-      </Grid>
 
-      <RegisterCropDialog
-        open={openRegisterDialog}
-        onClose={() => setOpenRegisterDialog(false)}
-        onSuccess={(response) => {
-          setOpenRegisterDialog(false);
-          setCrops(prevCrops => [response.crop, ...prevCrops]);
-        }}
-      />
-    </Container>
+        <WalletInfo
+          profile={profile}
+          onRegisterCrop={() => setOpenDialog(true)}
+          onWalletConnect={handleWalletConnect}
+          onWalletDisconnect={handleWalletDisconnect}
+        />
+
+        <RegisterCropDialog
+          open={openDialog}
+          onClose={() => setOpenDialog(false)}
+          onSubmit={handleRegisterCrop}
+          walletAddress={walletAddress}
+        />
+      </Container>
+    </Box>
   );
 };
 

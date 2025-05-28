@@ -2,6 +2,7 @@
   "name": "backend",
   "version": "1.0.0",
   "main": "debug.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
@@ -11,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@solana/spl-token": "^0.4.13",
     "@solana/web3.js": "^1.98.0",
     "bcryptjs": "^3.0.2",
     "buffer": "^6.0.3",
