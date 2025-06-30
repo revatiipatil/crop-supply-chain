@@ -28,7 +28,7 @@ A modern web application for managing agricultural supply chains, built with Nod
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/crop-supply-chain.git
+git clone https://github.com/revatiipatil/crop-supply-chain.git
 cd crop-supply-chain
 ```
 
@@ -49,10 +49,4 @@ JWT_SECRET=your_jwt_secret
 npm run dev
 ```
 
-## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 
